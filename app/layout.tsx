@@ -44,25 +44,36 @@ export default function RootLayout({
                 if (window.__ZAMMAD_CHAT_LOADED__) return;
                 window.__ZAMMAD_CHAT_LOADED__ = true;
 
+                var widgetSrc = ${JSON.stringify(widgetSrc)};
+                console.info('[Zammad] widgetSrc:', widgetSrc);
+                console.info('[Zammad] typeof ZammadChat (initial):', typeof ZammadChat);
+
                 var tries = 0;
                 var timer = setInterval(function () {
                   tries++;
 
                   if (typeof ZammadChat !== 'undefined') {
                     clearInterval(timer);
-                    new ZammadChat({
-                      chatId: 1,
-                      fontSize: '12px',
-                      show: true
-                    });
+                    console.info('[Zammad] typeof ZammadChat (ready):', typeof ZammadChat);
+                    try {
+                      new ZammadChat({
+                        chatId: 1,
+                        fontSize: '12px',
+                        show: true,
+                        debug: true
+                      });
+                    } catch (err) {
+                      console.error('[Zammad] init error:', err);
+                    }
                     return;
                   }
 
                   if (tries >= 50) {
                     clearInterval(timer);
-                    console.warn('ZammadChat is still undefined after waiting. Check widgetSrc:', ${JSON.stringify(
+                    console.warn(
+                      '[Zammad] ZammadChat is still undefined after waiting. Check widgetSrc:',
                       widgetSrc
-                    )});
+                    );
                   }
                 }, 100);
               })();
