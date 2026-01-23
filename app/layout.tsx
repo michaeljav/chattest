@@ -11,18 +11,16 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const zammadUrl = process.env.NEXT_PUBLIC_ZAMMAD_URL;
+  const zammadUrl = (process.env.NEXT_PUBLIC_ZAMMAD_URL || "").replace(/\/$/, "");
 
-  // ✅ Zammad te dio el snippet con "chat-no-jquery.min.js"
+  // ✅ Script recomendado por Zammad 6.5.2 (no-jquery)
   const widgetSrc =
     process.env.NEXT_PUBLIC_ZAMMAD_CHAT_WIDGET_URL ||
-    (zammadUrl
-      ? `${zammadUrl.replace(/\/$/, "")}/assets/chat/chat-no-jquery.min.js`
-      : "");
+    (zammadUrl ? `${zammadUrl}/assets/chat/chat-no-jquery.min.js` : "");
 
-  if (!widgetSrc) {
+  if (!zammadUrl || !widgetSrc) {
     console.warn(
-      "Missing NEXT_PUBLIC_ZAMMAD_URL or NEXT_PUBLIC_ZAMMAD_CHAT_WIDGET_URL in env."
+      "Missing NEXT_PUBLIC_ZAMMAD_URL and/or NEXT_PUBLIC_ZAMMAD_CHAT_WIDGET_URL in env."
     );
   }
 
@@ -31,36 +29,46 @@ export default function RootLayout({
       <body>
         {children}
 
-        {/* ✅ 1) Script del chat (NO jQuery) */}
+        {/* 1) Script del chat (NO jQuery) */}
         {widgetSrc ? (
-          <Script src={widgetSrc} strategy="afterInteractive" />
+          <Script
+            id="zammad-chat-widget"
+            src={widgetSrc}
+            strategy="afterInteractive"
+          />
         ) : null}
 
-        {/* ✅ 2) Inicialización del chat (usa chatId: 1 como dice Zammad) */}
-        {widgetSrc ? (
+        {/* 2) Init (FORZAMOS host para evitar wss://undefined/ws) */}
+        {widgetSrc && zammadUrl ? (
           <Script id="zammad-chat-init" strategy="afterInteractive">
             {`
               (function () {
                 if (window.__ZAMMAD_CHAT_LOADED__) return;
                 window.__ZAMMAD_CHAT_LOADED__ = true;
 
+                var zammadUrl = ${JSON.stringify(zammadUrl)};
                 var widgetSrc = ${JSON.stringify(widgetSrc)};
+                console.info('[Zammad] zammadUrl:', zammadUrl);
                 console.info('[Zammad] widgetSrc:', widgetSrc);
-                console.info('[Zammad] typeof ZammadChat (initial):', typeof ZammadChat);
 
                 var tries = 0;
+                var maxTries = 100; // 10s
                 var timer = setInterval(function () {
                   tries++;
 
                   if (typeof ZammadChat !== 'undefined') {
                     clearInterval(timer);
-                    console.info('[Zammad] typeof ZammadChat (ready):', typeof ZammadChat);
+
+                    console.info('[Zammad] ZammadChat ready. Initializing...');
                     try {
                       new ZammadChat({
                         chatId: 1,
                         fontSize: '12px',
                         show: true,
-                        debug: true
+                        debug: true,
+
+                        // ✅ CLAVE: evita wss://undefined/ws
+                        host: zammadUrl
                       });
                     } catch (err) {
                       console.error('[Zammad] init error:', err);
@@ -68,12 +76,9 @@ export default function RootLayout({
                     return;
                   }
 
-                  if (tries >= 50) {
+                  if (tries >= maxTries) {
                     clearInterval(timer);
-                    console.warn(
-                      '[Zammad] ZammadChat is still undefined after waiting. Check widgetSrc:',
-                      widgetSrc
-                    );
+                    console.warn('[Zammad] ZammadChat still undefined after waiting.');
                   }
                 }, 100);
               })();
