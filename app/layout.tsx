@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
@@ -7,25 +8,31 @@ export const metadata: Metadata = {
   description: "Next.js page embedding Zammad chat widget",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const ZAMMAD_HOST = "https://k5.gt.com.do"; // 🔴 FIJO Y EXPLÍCITO
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // IMPORTANTE:
+  // Usa host SIN protocolo para evitar que el widget arme mal el wss://
+  const ZAMMAD_HOSTNAME = "k5.gt.com.do";
+  const ZAMMAD_HTTP = `https://${ZAMMAD_HOSTNAME}`;
+  const ZAMMAD_WS = `wss://${ZAMMAD_HOSTNAME}/ws`;
 
   return (
     <html lang="en">
       <body>
         {children}
 
-        {/* 1️⃣ Script oficial SIN jQuery */}
+        {/* 1) Cargar el widget (sin jQuery) */}
         <Script
-          src={`${ZAMMAD_HOST}/assets/chat/chat-no-jquery.min.js`}
+          src={`${ZAMMAD_HTTP}/assets/chat/chat-no-jquery.min.js`}
           strategy="afterInteractive"
+          onLoad={() => {
+            // solo para depurar que realmente cargó
+            // (esto se ejecuta en el cliente)
+            // @ts-ignore
+            console.info("[Zammad] widget loaded, typeof ZammadChat:", typeof window?.ZammadChat);
+          }}
         />
 
-        {/* 2️⃣ Inicialización correcta */}
+        {/* 2) Inicializar */}
         <Script id="zammad-chat-init" strategy="afterInteractive">
           {`
             (function () {
@@ -38,14 +45,17 @@ export default function RootLayout({
 
                 if (typeof ZammadChat !== 'undefined') {
                   clearInterval(timer);
-                  console.info('[Zammad] Initializing chat…');
 
+                  console.info('[Zammad] Initializing…');
+
+                  // OJO: forzamos websocketUrl para que NO sea wss://undefined/ws
                   new ZammadChat({
-                    host: '${ZAMMAD_HOST}',   // ✅ CLAVE
                     chatId: 1,
                     show: true,
                     debug: true,
-                    fontSize: '12px'
+                    fontSize: '12px',
+                    host: '${ZAMMAD_HOSTNAME}',
+                    websocketUrl: '${ZAMMAD_WS}'
                   });
 
                   return;
@@ -53,7 +63,7 @@ export default function RootLayout({
 
                 if (tries >= 50) {
                   clearInterval(timer);
-                  console.error('[Zammad] ZammadChat not available');
+                  console.error('[Zammad] ZammadChat not available after waiting.');
                 }
               }, 100);
             })();
